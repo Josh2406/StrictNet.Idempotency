@@ -1,24 +1,29 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+	<PropertyGroup>
+		<TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
 
-	  <!-- NuGet Package Metadata -->
-	  <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-	  <PackageId>StrictNet.Idempotency.AspNetCore</PackageId>
-	  <Authors>Josh2406</Authors>
-	  <Description>A light-weight, high-performance idempotency middleware for .NET APIs targeting .NET 6, 8, and 10. Prevents duplicate requests and race conditions using distributed Redis locks.</Description>
-	  <PackageTags>aspnetcore;middleware;idempotency;idempotent;redis;cache</PackageTags>
-	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
-	  <RepositoryUrl>https://github.com/Josh2406/StrictNet.Idempotency</RepositoryUrl>
-	  <RepositoryType>git</RepositoryType>
-  </PropertyGroup>
+		<!-- NuGet Package Metadata -->
+		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+		<PackageId>StrictNet.Idempotency.AspNetCore</PackageId>
+		<Authors>Josh2406</Authors>
+		<Description>A light-weight, high-performance idempotency middleware for .NET APIs targeting .NET 6, 8, and 10. Prevents duplicate requests and race conditions using distributed Redis locks.</Description>
+		<PackageTags>aspnetcore;middleware;idempotency;idempotent;redis;cache</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<RepositoryUrl>https://github.com/Josh2406/StrictNet.Idempotency</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+	</PropertyGroup>
 
 	<!-- Suppress out-of-support platform dependency warnings exclusively for the .NET 6 target build slice -->
 	<PropertyGroup Condition="'$(TargetFramework)' == 'net6.0'">
 		<SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<!-- Suppress IDE0028 across the entire project -->
+		<NoWarn>$(NoWarn);IDE0028</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
