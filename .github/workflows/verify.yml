@@ -1,0 +1,33 @@
+name: Verify Build & Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Build & Test (.NET 8/9)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          6.0.x
+          8.0.x
+          10.0.x
+
+    - name: Restore Dependencies
+      run: dotnet restore
+
+    - name: Build Solution
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run Unit & Integration Tests
+      run: dotnet test --configuration Release --no-build --verbosity normal
