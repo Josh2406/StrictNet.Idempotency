@@ -427,3 +427,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# AI / Copilot configurations
+copilot-instructions.md
+.copilot-instructions

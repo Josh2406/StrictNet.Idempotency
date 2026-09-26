@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StrictNet.Idempotency.AspNetCore/StrictNet.Idempotency.AspNetCore.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StrictNet.Idempotency.AspNetCore.Tests/StrictNet.Idempotency.AspNetCore.Tests.csproj" />
+  </Folder>
+</Solution>
