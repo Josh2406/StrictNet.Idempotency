@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using Moq;
 using StrictNet.Idempotency.AspNetCore.Core;
+using StrictNet.Idempotency.AspNetCore.Stores;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -175,6 +176,47 @@ namespace StrictNet.Idempotency.AspNetCore.Tests.Unit
 
             // Assert
             Assert.That(nextCalled, Is.True, "Should fail open and proceed to the next middleware.");
+        }
+
+        [Test]
+        [CancelAfter(3000)] // Fails the test if it hangs beyond 3 seconds
+        public async Task InvokeAsync_ConcurrentRequests_OnlyExecutesOnce()
+        {
+            // Arrange
+            var store = new InMemoryIdempotencyStore();
+            var executionCount = 0;
+
+            var middleware = CreateMiddleware(async ctx =>
+            {
+                Interlocked.Increment(ref executionCount);
+                ctx.Response.StatusCode = 200;
+                await ctx.Response.WriteAsync("Success");
+                await Task.Delay(100); // Simulate work to force contention
+            });
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+            // Act
+            var tasks = Enumerable.Range(0, 3).Select(async _ =>
+            {
+                var ctx = new DefaultHttpContext();
+                ctx.Request.Headers[_options.HeaderName] = "concurrent-key";
+                ctx.Response.Body = new MemoryStream();
+                ctx.RequestAborted = cts.Token; // Fails gracefully on timeout
+
+                await middleware.InvokeAsync(ctx, store);
+                return ctx;
+            });
+
+            var results = await Task.WhenAll(tasks);
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(executionCount, Is.EqualTo(1), "Handler should strictly execute once.");
+                Assert.That(results.Count(c => c.Response.StatusCode == 200), Is.EqualTo(1));
+                Assert.That(results.Count(c => c.Response.StatusCode == 409), Is.EqualTo(2));
+            });
         }
     }
 }

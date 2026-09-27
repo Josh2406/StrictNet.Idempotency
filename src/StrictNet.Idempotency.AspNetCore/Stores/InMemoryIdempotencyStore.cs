@@ -26,7 +26,7 @@ namespace StrictNet.Idempotency.AspNetCore.Stores
         public async Task<bool> TryAcquireLockAsync(string key, TimeSpan timeout, CancellationToken ct = default)
         {
             var sem = _locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            return await sem.WaitAsync(timeout, ct);
+            return await sem.WaitAsync(TimeSpan.Zero, ct);
         }
     }
 }
