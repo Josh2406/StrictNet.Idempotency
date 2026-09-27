@@ -36,7 +36,7 @@ Clients retry. Load balancers retry. Mobile apps on flaky networks retry. Withou
 dotnet add package StrictNet.Idempotency.AspNetCore
 ```
 
-## Quick start
+## Quick Start
 
 ### 1. Register a store and the middleware
 
