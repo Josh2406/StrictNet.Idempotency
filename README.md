@@ -1,96 +1,141 @@
-# StrictNet.Idempotency.AspNetCore
+# StrictNet.Idempotency
 
-StrictNet.Idempotency.AspNetCore provides a small, framework-agnostic idempotency execution pipeline for ASP.NET Core applications. It helps prevent duplicate processing of requests by honoring a client-supplied idempotency key, optionally returning a cached response for repeated requests and coordinating concurrent requests with per-key locks.
+[![Verify Build & Tests](https://github.com/Josh2406/StrictNet.Idempotency/actions/workflows/verify.yml/badge.svg)](https://github.com/Josh2406/StrictNet.Idempotency/actions/workflows/verify.yml)
+[![NuGet](https://img.shields.io/nuget/v/StrictNet.Idempotency.AspNetCore.svg)](https://www.nuget.org/packages/StrictNet.Idempotency.AspNetCore)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-6%20%7C%208%20%7C%2010-512BD4)](#requirements)
 
-Supported target frameworks
-- .NET 6
-- .NET 8
-- .NET 10
+A lightweight, high-performance idempotency middleware for ASP.NET Core APIs. It prevents duplicate side effects from retried or concurrent requests by caching responses and coordinating access with a distributed lock, keyed off a client-supplied `Idempotency-Key` header.
 
-Features
-- Middleware that detects an idempotency key header and short-circuits when a cached response is available.
-- Pluggable IIdempotencyStore implementations (InMemory and Redis provided).
-- Per-key locking to avoid duplicate execution for concurrent requests.
-- Configurable behavior: header name, cache duration, lock timeout, conflict handling, and fail-open.
+## Why
 
-Quickstart
+Clients retry. Load balancers retry. Mobile apps on flaky networks retry. Without idempotency protection, a retried `POST /payments` or `POST /orders` can create the same resource twice. StrictNet.Idempotency solves this by:
 
-1. Add the package to your project
+- **Replaying the original response** for a request whose key it has already seen, instead of executing the handler again.
+- **Locking in-flight requests** so that two concurrent calls with the same key don't both reach your business logic.
+- **Rejecting concurrent duplicates** with `409 Conflict` while the original request is still processing.
 
-If you are using the project in the same solution, add a project reference. The NuGet package is published, you can install it instead:
+## Features
 
+- 🔒 **Distributed locking** via Redis, safe across multiple API instances.
+- ⚡ **In-memory store** for local development, testing, and single-instance deployments.
+- 🧩 **Drop-in middleware** — a few lines in `Program.cs`, no changes to your controllers or minimal API handlers.
+- ⚙️ **Configurable** header name, cache duration, lock timeout, conflict behavior, and fail-open/fail-closed error handling.
+- 🎯 **Multi-target** support for .NET 6, .NET 8, and .NET 10.
+
+## Requirements
+
+| | |
+|---|---|
+| Target frameworks | .NET 6.0, .NET 8.0, .NET 10.0 |
+| Distributed store | Redis (via [StackExchange.Redis](https://github.com/StackExchange/StackExchange.Redis)) — optional, only required for `AddRedisIdempotencyStore` |
+
+## Installation
+
+```bash
 dotnet add package StrictNet.Idempotency.AspNetCore
+```
 
-2. Register services and middleware (Program.cs)
+## Quick start
 
+### 1. Register a store and the middleware
+
+Choose exactly one store. Registering both throws an `InvalidOperationException` at startup.
+
+```csharp
 using StrictNet.Idempotency.AspNetCore.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// register idempotency options (optional)
-builder.Services.AddIdempotency(opts =>
+builder.Services.AddIdempotency(options =>
 {
-	// defaults shown; change as needed
-	opts.HeaderName = "Idempotency-Key";
-	opts.CacheDuration = TimeSpan.FromHours(24);
-	opts.LockTimeout = TimeSpan.FromSeconds(5);
-	opts.Return409OnConflict = true;
-	opts.FailOpen = false;
+    options.HeaderName = "Idempotency-Key";       // default
+    options.CacheDuration = TimeSpan.FromHours(24); // how long a response is replayed
+    options.LockTimeout = TimeSpan.FromSeconds(5);  // max wait for an in-flight duplicate
+    options.Return409OnConflict = true;             // reject concurrent duplicates
+    options.FailOpen = false;                       // fail closed if the store is unavailable
 });
 
-// choose a store implementation
-// For single-node / development:
-builder.Services.AddInMemoryIdempotencyStore();
+// Production: distributed locking backed by Redis
+builder.Services.AddRedisIdempotencyStore(builder.Configuration.GetConnectionString("Redis")!);
 
-// For distributed scenarios (Redis):
-// builder.Services.AddRedisIdempotencyStore("localhost:6379");
+// Local dev / single-node / tests: in-process store
+// builder.Services.AddInMemoryIdempotencyStore();
 
 var app = builder.Build();
 
-// insert middleware into the pipeline
 app.UseIdempotency();
 
-// ... your endpoints
+app.MapPost("/payments", HandlePayment);
 
 app.Run();
+```
 
-How it works
-- The middleware inspects the configured header (default: `Idempotency-Key`). If no header is present the request passes through as normal.
-- If a cached response exists for the key, the middleware immediately writes the cached status code, headers and body and returns.
-- If no cached response exists, the middleware attempts to acquire a per-key lock using the configured store. If it cannot acquire the lock and `Return409OnConflict` is true, a 409 response is returned.
-- On successful execution (HTTP 2xx), the middleware captures response headers and body and saves them to the configured store for the configured cache duration.
+### 2. Send the header from the client
 
-Configuration / IdempotencyOptions
-- `HeaderName` (string): request header to read a key from (default: `Idempotency-Key`).
-- `CacheDuration` (TimeSpan): TTL for cached responses (default: 24 hours).
-- `LockTimeout` (TimeSpan): maximum time to wait to acquire a per-key lock (default: 5s).
-- `Return409OnConflict` (bool): whether to return 409 when a lock cannot be acquired (default: true).
-- `FailOpen` (bool): when true, internal idempotency errors will allow the request to be processed normally; when false exceptions will bubble (default: false).
+```http
+POST /payments HTTP/1.1
+Idempotency-Key: 8f14e45f-ceea-467e-9959-b8f7d5cbea1a
+Content-Type: application/json
 
-Provided stores
-- `InMemoryIdempotencyStore`: useful for local development and single-node deployments. No external dependencies.
-- `RedisIdempotencyStore`: recommended for distributed deployments. Uses `StackExchange.Redis` `IConnectionMultiplexer` internally.
+{ "amount": 4999, "currency": "usd" }
+```
 
-Notes about Redis
-- When using Redis in production, provide a resilient connection string and monitor connection health. TTL and locking semantics are implemented using Redis primitives; ensure clocks and network latency are accounted for when tuning `LockTimeout` and `CacheDuration`.
+- **First request** with a given key runs the handler normally, and the response (status code, headers, and body) is cached for `CacheDuration`.
+- **Repeated request** with the same key, after the first has completed, returns the cached response without re-executing the handler.
+- **Concurrent request** with the same key, while the first is still in flight, receives `409 Conflict` (when `Return409OnConflict` is `true`) instead of running the handler.
+- Requests without the header are passed straight through — idempotency is opt-in per client, not enforced globally.
 
-Testing
-- Unit tests and integration tests are included in the `tests` project. Run them with:
+Only responses with a `2xx` status code are cached; error responses are not stored, so a client can safely retry a failed request with the same key.
 
-dotnet test tests/StrictNet.Idempotency.AspNetCore.Tests
+## Configuration reference
 
-- Integration tests that exercise Redis use Testcontainers and require Docker to be available on the host.
+`IdempotencyOptions`, configured via `AddIdempotency`:
 
-Development
-- Build the solution: `dotnet build`
-- Run tests: `dotnet test`
+| Option | Default | Description |
+|---|---|---|
+| `HeaderName` | `"Idempotency-Key"` | The request header inspected for an idempotency key. Requests without it bypass the middleware entirely. |
+| `CacheDuration` | `24 hours` | How long a successful response is retained and replayed for the same key. |
+| `LockTimeout` | `5 seconds` | How long the middleware waits to acquire the lock for a key before treating it as a conflict. |
+| `Return409OnConflict` | `true` | When `true`, a concurrent duplicate request receives `409 Conflict`. When `false`, the request is simply dropped without a response body being written. |
+| `FailOpen` | `false` | When `true`, any unhandled error from the idempotency store (e.g. Redis unavailable) allows the request through to your handler unprotected. When `false` (default), the error propagates and the request fails — fail closed. |
 
-Contributing
-- Contributions are welcome. Please open issues for bugs or feature requests, and submit pull requests for fixes and features. Follow the established code style and add tests for behavioral changes.
+## Storage backends
 
-License
-- See LICENSE for license terms.
+### In-memory (`AddInMemoryIdempotencyStore`)
 
-Contact
-- For questions open an issue in the repository.
+Backed by `ConcurrentDictionary` and `SemaphoreSlim`. Fast and dependency-free, but state is local to the process — it does **not** coordinate across multiple instances and is cleared on restart. Intended for local development, testing, and single-node deployments.
 
+### Redis (`AddRedisIdempotencyStore`)
+
+Backed by [StackExchange.Redis](https://github.com/StackExchange/StackExchange.Redis). Locks use `SET NX` with an expiry so a crashed instance can't hold a key forever; cached responses are stored as JSON with a TTL matching `CacheDuration`. Safe to use across any number of API instances sharing the same Redis server. Recommended for production.
+
+You can implement `IIdempotencyStore` yourself to plug in a different backend (e.g. SQL Server, DynamoDB):
+
+```csharp
+public interface IIdempotencyStore
+{
+    Task<bool> TryAcquireLockAsync(string key, TimeSpan timeout, CancellationToken ct = default);
+    Task ReleaseLockAsync(string key, CancellationToken ct = default);
+    Task<IdempotentResponse?> GetResponseAsync(string key, CancellationToken ct = default);
+    Task SaveResponseAsync(string key, IdempotentResponse response, TimeSpan expiry, CancellationToken ct = default);
+}
+```
+
+## Building and testing
+
+```bash
+dotnet restore
+dotnet build --configuration Release
+dotnet test --configuration Release
+```
+
+The test suite covers unit tests for the middleware pipeline, concurrency validation against the in-memory store, and integration tests against a real Redis instance via Testcontainers (requires Docker to be available on the host).
+
+## Contributing
+
+Issues and pull requests are welcome. Please open an issue to discuss significant changes before submitting a PR, and follow the established code style with tests for behavioral changes.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
