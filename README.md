@@ -88,7 +88,7 @@ Content-Type: application/json
 
 Only responses with a `2xx` status code are cached; error responses are not stored, so a client can safely retry a failed request with the same key.
 
-## Configuration reference
+## Configuration Reference
 
 `IdempotencyOptions`, configured via `AddIdempotency`:
 
@@ -100,7 +100,7 @@ Only responses with a `2xx` status code are cached; error responses are not stor
 | `Return409OnConflict` | `true` | When `true`, a concurrent duplicate request receives `409 Conflict`. When `false`, the request is simply dropped without a response body being written. |
 | `FailOpen` | `false` | When `true`, any unhandled error from the idempotency store (e.g. Redis unavailable) allows the request through to your handler unprotected. When `false` (default), the error propagates and the request fails — fail closed. |
 
-## Storage backends
+## Storage Backends
 
 ### In-memory (`AddInMemoryIdempotencyStore`)
 
@@ -122,7 +122,7 @@ public interface IIdempotencyStore
 }
 ```
 
-## Building and testing
+## Building and Testing
 
 ```bash
 dotnet restore
