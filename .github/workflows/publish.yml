@@ -8,12 +8,15 @@ jobs:
   deploy:
     name: Package & Deploy
     runs-on: ubuntu-latest
+    environment: release       
+    permissions:
+      id-token: write      
+      contents: read         
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 🛠️ FIX: Install all targeted SDKs so multi-targeting compiles perfectly on release
     - name: Setup .NET SDKs
       uses: actions/setup-dotnet@v4
       with:
@@ -22,28 +25,30 @@ jobs:
           8.0.x
           10.0.x
 
-    # Extract version number from the git release tag (e.g., v1.2.3 -> 1.2.3)
     - name: Extract Version
-      id: get_version
       run: |
         TAG_NAME="${{ github.event.release.tag_name }}"
-        VERSION="${TAG_NAME#v}"
-        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "VERSION=${TAG_NAME#v}" >> $GITHUB_ENV
 
     - name: Restore Dependencies
       run: dotnet restore
 
-    # Build and Pack using the dynamic version matching your GitHub release
     - name: Pack NuGet Package
       run: |
-        dotnet pack --configuration Release \
+        dotnet pack --configuration Release --no-restore \
           -p:PackageVersion=${{ env.VERSION }} \
           --output ./artifacts
 
-    # Push to NuGet using your secure repository secret
+    # Swap the GitHub OIDC token for a short-lived NuGet API key (valid for 1 hour)
+    - name: NuGet login (OIDC → temp API key)
+      uses: NuGet/login@v1
+      id: login
+      with:
+        user: ${{ secrets.NUGET_USER }}   # nuget.org profile name, NOT your email
+
     - name: Push to NuGet.org
       run: |
         dotnet nuget push "./artifacts/*.nupkg" \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://nuget.org \
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
           --skip-duplicate
